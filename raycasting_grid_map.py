@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 EXTEND_AREA = 10.0
+RAYS_RANGE = 25.0 # maximum rays range [m]
 
 show_animation = True
 
@@ -84,21 +85,22 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
     precast = precasting(minx, miny, xw, yw, xyreso, yawreso, posx=posx, posy=posy)
 
     for (x, y) in zip(ox, oy):
-
+        # Check if given obstacle is in rays range
         d = math.hypot(x - posx, y - posy)
-        angle = atan_zero_to_twopi(y - posy, x - posx)
-        angleid = int(math.floor(angle / yawreso))
+        if d <= RAYS_RANGE:
+            angle = atan_zero_to_twopi(y - posy, x - posx)
+            angleid = int(math.floor(angle / yawreso))
 
-        gridlist = precast[angleid]
+            gridlist = precast[angleid]
 
-        ix = int(round((x - minx) / xyreso))
-        iy = int(round((y - miny) / xyreso))
+            ix = int(round((x - minx) / xyreso))
+            iy = int(round((y - miny) / xyreso))
 
-        for grid in gridlist:
-            if grid.d > d:
-                pmap[grid.ix][grid.iy] = 0.5
+            for grid in gridlist:
+                if grid.d > d:
+                    pmap[grid.ix][grid.iy] = 0.5
 
-        pmap[ix][iy] = 1.0
+            pmap[ix][iy] = 1.0
 
     return pmap, minx, maxx, miny, maxy, xyreso
 
