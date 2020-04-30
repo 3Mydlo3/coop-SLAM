@@ -10,17 +10,17 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-EXTEND_AREA = 10.0
-RAYS_RANGE = 25.0 # maximum rays range [m]
+EXTEND_AREA = 30.0
+RAYS_RANGE = 14.0 # maximum rays range [m]
 
 show_animation = True
 
 
-def calc_grid_map_config(ox, oy, xyreso):
-    minx = round(min(ox) - EXTEND_AREA / 2.0)
-    miny = round(min(oy) - EXTEND_AREA / 2.0)
-    maxx = round(max(ox) + EXTEND_AREA / 2.0)
-    maxy = round(max(oy) + EXTEND_AREA / 2.0)
+def calc_grid_map_config(ox, oy, xyreso, posx=0, posy=0):
+    minx = round(posx - EXTEND_AREA / 2.0)
+    miny = round(posy - EXTEND_AREA / 2.0)
+    maxx = round(posx + EXTEND_AREA / 2.0)
+    maxy = round(posy + EXTEND_AREA / 2.0)
     xw = int(round((maxx - minx) / xyreso))
     yw = int(round((maxy - miny) / xyreso))
 
@@ -78,16 +78,19 @@ def precasting(minx, miny, xw, yw, xyreso, yawreso, posx=0, posy=0):
 
 def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
 
-    minx, miny, maxx, maxy, xw, yw = calc_grid_map_config(ox, oy, xyreso)
+    minx, miny, maxx, maxy, xw, yw = calc_grid_map_config(ox, oy, xyreso, posx=posx, posy=posy)
 
     pmap = [[0.0 for i in range(yw)] for i in range(xw)]
 
     precast = precasting(minx, miny, xw, yw, xyreso, yawreso, posx=posx, posy=posy)
 
+    obstacles_in_range = np.empty((0, 2))
     for (x, y) in zip(ox, oy):
         # Check if given obstacle is in rays range
         d = math.hypot(x - posx, y - posy)
         if d <= RAYS_RANGE:
+            obstacles_in_range = np.append(obstacles_in_range, np.array([[x, y]]), axis=0)
+  
             angle = atan_zero_to_twopi(y - posy, x - posx)
             angleid = int(math.floor(angle / yawreso))
 
@@ -102,7 +105,7 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
 
             pmap[ix][iy] = 1.0
 
-    return pmap, minx, maxx, miny, maxy, xyreso
+    return pmap, minx, maxx, miny, maxy, xyreso, obstacles_in_range
 
 
 def draw_heatmap(data, minx, maxx, miny, maxy, xyreso):

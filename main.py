@@ -16,6 +16,9 @@ def main():
                      [3.0, 15.0],
                      [-5.0, 20.0]])
 
+    # Initialize detected objects with dummy, nonexistent one
+    detected_objects = np.array([[100, 100]])
+
     # Raycasting
     xyreso = 0.25  # x-y grid resolution [m]
     yawreso = np.deg2rad(2.0)  # yaw angle resolution [rad]
@@ -39,7 +42,7 @@ def main():
     while SIM_TIME >= time:
         # Frenet Optimal Trajectory
         path = frenet_optimal_planning(
-        csp, s0, c_speed, c_d, c_d_d, c_d_dd, RFID)
+        csp, s0, c_speed, c_d, c_d_d, c_d_dd, detected_objects)
 
         s0 = path.s[1]
         c_d = path.d[1]
@@ -57,7 +60,7 @@ def main():
         # Raycasting
         landmarksX = RFID[:,0]
         landmarksY = RFID[:,1]
-        pmap, minx, maxx, miny, maxy, xyreso = generate_ray_casting_grid_map(
+        pmap, minx, maxx, miny, maxy, xyreso, detected_objects = generate_ray_casting_grid_map(
             ox=landmarksX, oy=landmarksY, xyreso=xyreso, yawreso=yawreso,
             posx=path.x[1], posy=path.y[1])
 
