@@ -11,11 +11,8 @@ def main():
 
     time = 0.0
 
-    # RFID positions [x, y]
-    RFID = np.array([[10.0, 2.0],
-                     [15.0, 10.0],
-                     [3.0, 15.0],
-                     [5.0, 20.0]])
+    # RFID positions [[x, y], [x, y]]
+    RFID = np.random.random(size=(np.random.randint(100), 2)) * MAP_SIZE
     # Initialize detected objects with dummy, nonexistent one
     detected_objects = np.array([[100, 100]])
     mapped_objects = np.empty((0,2))
@@ -25,8 +22,13 @@ def main():
 
     # Frenet Trajectory
     # way points
-    wx = [initial_position[0], 20, 1]
-    wy = [initial_position[1], 7, 18]
+    wx = [initial_position[0]]
+    wy = [initial_position[1]]
+    random_waypoints = np.random.randint(1, 4)
+    wx2 = np.random.random(size=(random_waypoints)) * MAP_SIZE[0]
+    wy2 = np.random.random(size=(random_waypoints)) * MAP_SIZE[1]
+    wx = np.append(wx, wx2)
+    wy = np.append(wy, wy2)
 
     tx, ty, tyaw, tc, csp = generate_target_course(wx, wy)
 
@@ -100,6 +102,8 @@ def main():
             ax2.grid(True)
             # Draw robot
             ax2.plot(path.x[1], path.y[1], marker=(3, 0, robot_direction), color='tab:blue')
+            # Draw waypoints
+            ax2.plot(wx, wy, "-or")
             # Draw mapped objects
             ax2.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xk")
             ax2.set_xlim(0, MAP_SIZE[0])
