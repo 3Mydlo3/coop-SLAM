@@ -156,9 +156,10 @@ def calc_frenet_paths(c_speed, c_d, c_d_d, c_d_dd, s0):
                 # square of diff from target speed
                 ds = (TARGET_SPEED - tfp.s_d[-1]) ** 2
 
-                tfp.cd = K_J * Jp + K_T * Ti + K_D * tfp.d[-1] ** 2
-                tfp.cv = K_J * Js + K_T * Ti + K_D * ds
-                tfp.cf = K_LAT * tfp.cd + K_LON * tfp.cv
+                #tfp.cd = K_J * Jp + K_T * Ti + K_D * tfp.d[-1] ** 2
+                #tfp.cv = K_J * Js + K_T * Ti + K_D * ds
+                #tfp.cf = K_LAT * tfp.cd + K_LON * tfp.cv
+                tfp.cf = tfp.d[-1] ** 2
 
                 frenet_paths.append(tfp)
 
