@@ -90,7 +90,7 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
         d = math.hypot(x - posx, y - posy)
         if d <= RAYS_RANGE:
             obstacles_in_range = np.append(obstacles_in_range, np.array([[x, y]]), axis=0)
-  
+
             angle = atan_zero_to_twopi(y - posy, x - posx)
             angleid = int(math.floor(angle / yawreso))
 
@@ -108,8 +108,7 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
     return pmap, minx, maxx, miny, maxy, xyreso, obstacles_in_range
 
 
-def draw_heatmap(data, minx, maxx, miny, maxy, xyreso):
+def draw_heatmap(data, minx, maxx, miny, maxy, xyreso, ax=plt):
     x, y = np.mgrid[slice(minx - xyreso / 2.0, maxx + xyreso / 2.0, xyreso),
                     slice(miny - xyreso / 2.0, maxy + xyreso / 2.0, xyreso)]
-    plt.pcolor(x, y, data, vmax=1.0, cmap=plt.cm.Blues)
-    plt.axis("equal")
+    ax.pcolor(x, y, data, vmax=1.0, cmap=plt.cm.Blues)
