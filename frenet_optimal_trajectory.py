@@ -109,9 +109,9 @@ class FrenetPath:
         self.s_d = []
         self.s_dd = []
         self.s_ddd = []
-        self.cd = 0.0
-        self.cv = 0.0
-        self.cf = 0.0
+        self.cd = 0.0 # Cost distance
+        self.cv = 0.0 # Cost velocity
+        self.cf = 0.0 # Cost final
 
         self.x = []
         self.y = []
