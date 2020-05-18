@@ -105,10 +105,16 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
 
             pmap[ix][iy] = 1.0
 
-    return pmap, minx, maxx, miny, maxy, xyreso, obstacles_in_range
+    return pmap, minx, maxx, miny, maxy, obstacles_in_range
 
 
-def draw_heatmap(data, minx, maxx, miny, maxy, xyreso, ax=plt):
+def get_heatmap(data, minx, maxx, miny, maxy, xyreso):
     x, y = np.mgrid[slice(minx - xyreso / 2.0, maxx + xyreso / 2.0, xyreso),
                     slice(miny - xyreso / 2.0, maxy + xyreso / 2.0, xyreso)]
-    ax.pcolor(x, y, data, vmax=1.0, cmap=plt.cm.Blues)
+    # Slice one sample for compatibility with data size
+    x, y = x[:-1, :-1] , y[:-1, :-1]
+    # Create circle showing rays range
+    data = np.where(np.logical_and(np.sqrt(np.power(x - np.average([minx, maxx]), 2) + np.power(y - np.average([miny, maxy]), 2)) < RAYS_RANGE, np.array(data) == 0), 0.01, data)
+    # Filter all data outside rays range
+    data = np.where(np.sqrt(np.power(x - np.average([minx, maxx]), 2) + np.power(y - np.average([miny, maxy]), 2)) > RAYS_RANGE, 0, data)
+    return x, y, data

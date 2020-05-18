@@ -2,14 +2,24 @@ from raycasting_grid_map import *
 from frenet_optimal_trajectory import *
 
 SIM_TIME = 50.0 # simulation time [s]
+# Map
 MAP_SIZE = [100, 100] # X and Y size of map
+OBJECTS_COUNT = 100 # Number of objects created on the map
+# Raycasting
+XY_RES = 0.25  # x-y grid resolution [m]
+YAW_RES = np.deg2rad(2.0)  # yaw angle resolution [rad]
+# Robots
 ROBOTS_COUNT = 3 # Number of scanning robots
 FOLLOW_ROBOT = 0 # Index of followed robot
+# Plots
+ANIM_AREA = 20.0  # animation area length [m]
 
 class Robot:
-    def __init__(self, init_pos=None, color=None):
+    def __init__(self, map_, init_pos=None, color=None):
+        self.map = map_
+        self.map.assign_robot(self)
         if init_pos is None:
-            init_pos = np.squeeze(random_on_map())
+            init_pos = np.squeeze(self.map.random_position())
         self.color = color
         self.c_speed = 10.0 / 3.6  # current speed [m/s]
         self.c_d = init_pos[0]  # current lateral position [m]
@@ -20,14 +30,24 @@ class Robot:
         # Start moving
         self.generate_target_course()
 
+    def simulate(self):
+        """
+        Method handling whole simulation of robot in current frame
+        """
+        try:
+            self.plan_path()
+        except AttributeError:
+            self.generate_target_course()
+        self.raycasting()
+        self.check_arrived()
+
     def generate_waypoints(self):
         wx = [self.s0]
         wy = [self.c_d]
         random_waypoints = np.random.randint(1, 4)
-        wx2 = np.random.random(size=(random_waypoints)) * MAP_SIZE[0]
-        wy2 = np.random.random(size=(random_waypoints)) * MAP_SIZE[1]
-        wx = np.append(wx, wx2)
-        wy = np.append(wy, wy2)
+        w2 = self.map.random_position(count=random_waypoints)
+        wx = np.append(wx, w2[:, 0])
+        wy = np.append(wy, w2[:, 1])
         return wx, wy
 
     def generate_target_course(self, wx=None, wy=None):
@@ -35,7 +55,8 @@ class Robot:
             self.wx, self.wy = self.generate_waypoints()
         self.tx, self.ty, self.tyaw, self.tc, self.csp = generate_target_course(self.wx, self.wy)
 
-    def plan_path(self, mapped_objects):
+    def plan_path(self):
+        mapped_objects = self.map.get_mapped_objects()
         path = frenet_optimal_planning(
         self.csp, self.s0, self.c_speed, self.c_d, self.c_d_d, self.c_d_dd, mapped_objects)
 
@@ -54,15 +75,15 @@ class Robot:
             return True
         return False
 
-    def raycasting(self, landmarksX, landmarksY, xyreso, yawreso):
+    def raycasting(self):
         position = self.get_position()
-        self.pmap, self.minx, self.maxx, self.miny, self.maxy, self.xyreso, self.detected_objects = generate_ray_casting_grid_map(
-            ox=landmarksX, oy=landmarksY, xyreso=xyreso, yawreso=yawreso,
+        objects = self.map.get_map_objects()
+        self.pmap, self.minx, self.maxx, self.miny, self.maxy, self.detected_objects = generate_ray_casting_grid_map(
+            ox=objects[:,0], oy=objects[:,1], xyreso=XY_RES, yawreso=YAW_RES,
             posx=position[0], posy=position[1])
+        if not len(self.detected_objects) == 0:
+            self.map.map_objects(self.detected_objects)
         return self.detected_objects
-
-    def draw_raycasting(self, ax=plt):
-        draw_heatmap(self.pmap, self.minx, self.maxx, self.miny, self.maxy, self.xyreso, ax=ax)
 
     def get_color(self):
         return self.color
@@ -86,23 +107,111 @@ class Robot:
         """Returns current robot position"""
         return (self.path.x[1], self.path.y[1])
 
+    def get_scan_data(self):
+        """Returns scanning data"""
+        return get_heatmap(self.pmap, self.minx, self.maxx, self.miny, self.maxy, XY_RES)
+
     def get_direction(self):
         """Returns current robot direction"""
         path = self.path
         return -90 + np.rad2deg(np.arctan2(path.y[1] - path.y[0], path.x[1] - path.x[0]))
 
-def random_on_map(count=None):
-    """
-    Returns random point within the map limits.
-    Can return multiple points as one array with count parameter."""
-    if count is None:
-        count = 1
-    return np.random.random(size=(count, 2)) * MAP_SIZE
 
+class Map:
+    def __init__(self, map_size, objects_count):
+        self.size = map_size
+        self.objects = self._generate_objects(objects_count)
+        self.mapped_objects = np.empty((0,2))
+        self.robots = []
+        self.map_coverage = self._prepare_map_coverage()
+
+    def _generate_objects(self, objects_count):
+        return self.random_position(objects_count)
+
+    def _prepare_map_coverage(self):
+        """Prepares 2-D array showing which map areas are already scanned"""
+        map_coverage = np.empty(shape=self.size)
+        self.map_coverage_size = self.size[0] * self.size[1]
+        return map_coverage
+
+    def assign_robot(self, robot):
+        """Assigns given robot to map"""
+        self.robots.append(robot)
+
+    def get_current_coverage(self):
+        """Returns current map coverage in %"""
+        return np.count_nonzero(self.map_coverage >= 0.5)/self.map_coverage_size * 100
+
+    def get_map_objects(self):
+        """Returns all objects on the map"""
+        return self.objects
+
+    def get_mapped_objects(self):
+        """Returns all mapped objects"""
+        return self.mapped_objects
+
+    def map_objects(self, objects):
+        """Tries to map given objects"""
+        self.mapped_objects = np.unique(np.append(self.mapped_objects, objects, axis=0), axis=0)
+
+    def random_position(self, count=None):
+        """
+        Returns random point within the map limits.
+        Can return multiple points as one array with count parameter."""
+        if count is None:
+            count = 1
+        return np.random.random(size=(count, 2)) * self.size
+
+    def in_map(self, positionX=0, positionY=0):
+        """Checks if given position is within map limits"""
+        return (positionX >= 0 and positionX <= self.size[0]) and (positionY >= 0 and positionY <= self.size[1])
+
+    def draw_current_scanning_area(self, ax=plt):
+        """
+        Draws current scanning data for all robots
+        """
+        # Create colormap
+        cmap = plt.cm.Blues
+        cmap.set_under(color='white')
+        for robot in self.robots:
+            # Get scan data for plot and map coverage update
+            x, y, scan_data = robot.get_scan_data()
+            self.update_map_coverage(x, y, scan_data)
+            # Draw on plot
+            ax.pcolormesh(x, y, scan_data, alpha=0.5, vmax=1.0, cmap=cmap, vmin=0.01)
+
+    def update_map_coverage(self, x, y, scan_data):
+        """
+        Updates map coverage array according to scanner data
+        """
+        # Extract only coordinates vector
+        x = x[:, 0]
+        y = y[0, :]
+        # Arange indexes of coordinates from vectors
+        x_index = np.arange(0, len(x), 1)
+        y_index = np.arange(0, len(y), 1)
+        # Convert coordinates from vectors to map_coverage indexes
+        x_map = [(int(x[i]), i) for i in x_index if self.in_map(positionX=x[i])]
+        y_map = [(int(y[j]), j) for j in y_index if self.in_map(positionY=y[j])]
+        for x_index, i in x_map:
+            for y_index, j in y_map:
+                # Check if grid is not already marked and grid was scanned now
+                if self.map_coverage[y_index, x_index] < 0.5 and scan_data[i, j] >= 0.01:
+                    self.map_coverage[y_index, x_index] = 0.5
+
+    def draw_map_coverage(self, ax=plt):
+        """Draws map coverage colormap on given plot"""
+        # Create colormap
+        cmap = plt.cm.Blues
+        cmap.set_under(color='white')
+        # Draw plot
+        ax.pcolormesh(self.map_coverage, vmax=1.0, vmin=0.01, cmap=cmap)
 
 def main():
     print(__file__ + " start!!")
 
+    map_entity = Map(map_size=MAP_SIZE, objects_count=OBJECTS_COUNT)
+    RFID = map_entity.get_map_objects()
 
     initial_positions = np.array([
         [0, 0],
@@ -114,53 +223,30 @@ def main():
     # Create robots
     robots = []
     for _i in range(0, ROBOTS_COUNT):
-        robots.append(Robot(init_pos=initial_positions[_i], color=colors[_i]))
+        robots.append(Robot(map_=map_entity, init_pos=initial_positions[_i], color=colors[_i]))
 
     time = 0.0
-
-    # RFID positions [[x, y], [x, y]]
-    RFID = random_on_map(100)
-    # Initialize detected objects with dummy, nonexistent one
-    detected_objects = np.array([[100, 100]])
-    mapped_objects = np.empty((0,2))
-    # Raycasting
-    xyreso = 0.25  # x-y grid resolution [m]
-    yawreso = np.deg2rad(2.0)  # yaw angle resolution [rad]
-
-    area = 20.0  # animation area length [m]
 
     # Prepare plots
     fig, (ax1, ax2) = plt.subplots(1, 2)
 
-    # Raycasting objects coordinates
-    landmarksX = RFID[:,0]
-    landmarksY = RFID[:,1]
-
     while SIM_TIME >= time:
         # Frenet Optimal Trajectory
         for robot in robots:
-            try:
-                robot.plan_path(mapped_objects)
-            except AttributeError:
-                robot.generate_target_course()
-            detected_objects = robot.raycasting(landmarksX, landmarksY, xyreso=xyreso, yawreso=yawreso)
-            if not len(detected_objects) == 0:
-                mapped_objects = np.unique(np.append(mapped_objects, detected_objects, axis=0), axis=0)
-            robot.check_arrived()
-            #if robot.check_arrived():
-            #    break
+            robot.simulate()
 
         time += DT
 
         if show_animation:  # pragma: no cover
             ax1.cla()
             ax2.cla()
+            mapped_objects = map_entity.get_mapped_objects()
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
             # plot frenet
-            ax1.set_title(f"Discorvered objects: {len(mapped_objects)}/{100}")
+            ax1.set_title(f"Discorvered: {map_entity.get_current_coverage():.2f} %")
             ax1.set_aspect("equal")
             ax1.grid(True)
             # Plot stuff
@@ -170,15 +256,15 @@ def main():
                 path = robot.get_path()
                 ax1.plot(path.x[1:], path.y[1:], "-or")
                 ax1.plot(*robot.get_position(), marker=(3, 0, robot.get_direction()), color=robot.get_color())
-                robot.draw_raycasting(ax=ax1)
+            map_entity.draw_current_scanning_area(ax=ax1)
 
             # Move map with followed robot
             path = robots[FOLLOW_ROBOT].get_path()
-            ax1.set_xlim(path.x[1] - area, path.x[1] + area)
-            ax1.set_ylim(path.y[1] - area, path.y[1] + area)
+            ax1.set_xlim(path.x[1] - ANIM_AREA, path.x[1] + ANIM_AREA)
+            ax1.set_ylim(path.y[1] - ANIM_AREA, path.y[1] + ANIM_AREA)
 
             # Draw raycasting
-            ax1.plot(landmarksX, landmarksY, "xr")
+            ax1.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xr")
 
             # Map plot
             ax2.set_title("Map")
@@ -189,9 +275,10 @@ def main():
                 ax2.plot(*robot.get_position(), marker=(3, 0, robot.get_direction()), color=robot.get_color())
                 ax2.plot(*robot.get_waypoints(), "-or")
             # Draw mapped objects
-            ax2.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xk")
+            ax2.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xr")
             ax2.set_xlim(0, MAP_SIZE[0])
             ax2.set_ylim(0, MAP_SIZE[1])
+            map_entity.draw_map_coverage(ax=ax2)
             # Small pause
             plt.pause(0.001)
 
