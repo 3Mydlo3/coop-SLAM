@@ -138,7 +138,7 @@ class Map:
 
     def _prepare_map_coverage(self):
         """Prepares 2-D array showing which map areas are already scanned"""
-        map_coverage = np.empty(shape=self.size)
+        map_coverage = np.zeros(shape=self.size)
         self.map_coverage_size = self.size[0] * self.size[1]
         return map_coverage
 
