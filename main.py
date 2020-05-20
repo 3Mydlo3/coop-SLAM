@@ -20,15 +20,19 @@ class Robot:
         self.map.assign_robot(self)
         if init_pos is None:
             init_pos = np.squeeze(self.map.random_position())
+        self.init_pos = init_pos
         self.color = color
-        self.c_speed = 10.0 / 3.6  # current speed [m/s]
-        self.c_d = init_pos[0]  # current lateral position [m]
-        self.c_d_d = 0.0  # current lateral speed [m/s]
-        self.c_d_dd = 0.0  # current lateral acceleration [m/s]
-        self.s0 = init_pos[1]  # current course position
-
+        self.init_variables()
         # Start moving
         self.generate_target_course()
+
+    def init_variables(self):
+        """Initializes robot variables for trajectories"""
+        self.c_speed = 10.0 / 3.6  # current speed [m/s]
+        self.c_d = 0.0  # current lateral position [m]
+        self.c_d_d = 0.0  # current lateral speed [m/s]
+        self.c_d_dd = 0.0  # current lateral acceleration [m/s]
+        self.s0 = 0.0  # current course position
 
     def simulate(self):
         """
@@ -36,14 +40,13 @@ class Robot:
         """
         try:
             self.plan_path()
-        except AttributeError:
+        except (AttributeError, IndexError):
             self.generate_target_course()
         self.raycasting()
         self.check_arrived()
 
     def generate_waypoints(self):
-        wx = [self.s0]
-        wy = [self.c_d]
+        [wx, wy] = self.get_position()
         random_waypoints = np.random.randint(1, 4)
         w2 = self.map.random_position(count=random_waypoints)
         wx = np.append(wx, w2[:, 0])
@@ -52,6 +55,7 @@ class Robot:
 
     def generate_target_course(self, wx=None, wy=None):
         if wx is None or wy is None:
+            self.init_variables()
             self.wx, self.wy = self.generate_waypoints()
         self.tx, self.ty, self.tyaw, self.tc, self.csp = generate_target_course(self.wx, self.wy)
 
@@ -70,7 +74,8 @@ class Robot:
 
     def check_arrived(self):
         """Checks if arrived at destination"""
-        if np.hypot(self.path.x[1] - self.tx[-1], self.path.y[1] - self.ty[-1]) <= 1.0:
+        current_position = self.get_position()
+        if np.hypot(current_position[0] - self.tx[-1], current_position[1] - self.ty[-1]) <= 1.0:
             self.generate_target_course()
             return True
         return False
@@ -105,7 +110,10 @@ class Robot:
 
     def get_position(self):
         """Returns current robot position"""
-        return (self.path.x[1], self.path.y[1])
+        try:
+            return (self.path.x[1], self.path.y[1])
+        except AttributeError:
+            return self.init_pos
 
     def get_scan_data(self):
         """Returns scanning data"""
