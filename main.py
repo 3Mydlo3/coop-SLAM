@@ -62,7 +62,8 @@ class Robot:
     def plan_path(self):
         mapped_objects = self.map.get_mapped_objects()
         path = frenet_optimal_planning(
-        self.csp, self.s0, self.c_speed, self.c_d, self.c_d_d, self.c_d_dd, mapped_objects)
+        self.csp, self.s0, self.c_speed, self.c_d,
+        self.c_d_d, self.c_d_dd, mapped_objects, map_size=self.map.get_size())
 
         # Update status
         self.s0 = path.s[1]
@@ -157,6 +158,10 @@ class Map:
     def get_mapped_objects(self):
         """Returns all mapped objects"""
         return self.mapped_objects
+
+    def get_size(self):
+        """Returns map size"""
+        return self.size
 
     def map_objects(self, objects):
         """Tries to map given objects"""
@@ -261,8 +266,11 @@ def main():
             ax1.plot(RFID[:, 0], RFID[:, 1], "xk")
             for robot in robots:
                 ax1.plot(robot.get_tx(), robot.get_ty())
-                path = robot.get_path()
-                ax1.plot(path.x[1:], path.y[1:], "-or")
+                try:
+                    path = robot.get_path()
+                    ax1.plot(path.x[1:], path.y[1:], "-or")
+                except AttributeError:
+                    pass
                 ax1.plot(*robot.get_position(), marker=(3, 0, robot.get_direction()), color=robot.get_color())
             map_entity.draw_current_scanning_area(ax=ax1)
 

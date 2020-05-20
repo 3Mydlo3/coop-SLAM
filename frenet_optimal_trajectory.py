@@ -210,7 +210,7 @@ def check_collision(fp, ob):
     return True
 
 
-def check_paths(fplist, ob):
+def check_paths(fplist, ob, map_size=None):
     ok_ind = []
     for i, _ in enumerate(fplist):
         if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
@@ -223,16 +223,22 @@ def check_paths(fplist, ob):
             continue
         elif not check_collision(fplist[i], ob):
             continue
+        elif (map_size is not None and
+            (
+                any(x < 0 or x > map_size[0] for x in fplist[i].x)
+                or any(y < 0 or y > map_size[1] for y in fplist[i].y)
+            )):
+            continue
 
         ok_ind.append(i)
 
     return [fplist[i] for i in ok_ind]
 
 
-def frenet_optimal_planning(csp, s0, c_speed, c_d, c_d_d, c_d_dd, ob):
+def frenet_optimal_planning(csp, s0, c_speed, c_d, c_d_d, c_d_dd, ob, map_size=None):
     fplist = calc_frenet_paths(c_speed, c_d, c_d_d, c_d_dd, s0)
     fplist = calc_global_paths(fplist, csp)
-    fplist = check_paths(fplist, ob)
+    fplist = check_paths(fplist, ob, map_size)
 
     # find minimum cost path
     min_cost = float("inf")
