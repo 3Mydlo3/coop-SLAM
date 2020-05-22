@@ -4,6 +4,7 @@ from frenet_optimal_trajectory import *
 SIM_TIME = 50.0 # simulation time [s]
 # Map
 MAP_SIZE = [100, 100] # X and Y size of map
+GRID_SIZE = 20 # Grid (square) size
 OBJECTS_COUNT = 100 # Number of objects created on the map
 # Raycasting
 XY_RES = 0.25  # x-y grid resolution [m]
@@ -18,13 +19,17 @@ class Robot:
     def __init__(self, map_, init_pos=None, color=None):
         self.map = map_
         self.map.assign_robot(self)
+        self.grid = None
+        self.grid_blacklist = [] # For marking currently unreachable grids
         if init_pos is None:
             init_pos = np.squeeze(self.map.random_position())
-        self.init_pos = init_pos
+        self.init_pos = np.array(init_pos)
+        self.direction = 0
         self.color = color
         self.init_variables()
+        self.error_count = 0 # Number of errors when trying to find way to destination
         # Start moving
-        self.generate_target_course()
+        self.simulate()
 
     def init_variables(self):
         """Initializes robot variables for trajectories"""
@@ -38,26 +43,94 @@ class Robot:
         """
         Method handling whole simulation of robot in current frame
         """
+        if not self.grid_ok():
+            self.raycasting()
+            return False
+        # Now let's try to reach assigned waypoint
         try:
+            # First check if we arrived and if yes let's create new course for path planning
+            self.check_arrived()
             self.plan_path()
+            self.calculate_direction()
+            self.grid_blacklist = [] # Reset grid blacklist
+            self.error_count = 0 # Number of errors when trying to find way to destination
         except (AttributeError, IndexError):
+            # No path could be found
+            self.error_count += 1
+            print(f"Robot: {self.color} | Errors: {self.error_count}")
             self.generate_target_course()
         self.raycasting()
-        self.check_arrived()
+        return True
 
-    def generate_waypoints(self):
+    def explore_grid(self):
+        """Creates waypoint inside currently explored grid"""
         [wx, wy] = self.get_position()
-        random_waypoints = np.random.randint(1, 4)
-        w2 = self.map.random_position(count=random_waypoints)
-        wx = np.append(wx, w2[:, 0])
-        wy = np.append(wy, w2[:, 1])
+        uncovered_positions = self.grid.get_uncovered_positions()
+        target = uncovered_positions[:, np.random.choice(np.shape(uncovered_positions)[1])]
+        target = self.grid.grid_to_map(target)
+        wx = np.append(wx, target[1])
+        wy = np.append(wy, target[0])
         return wx, wy
+
+    def find_nearest_grid(self):
+        """Finds nearest free grid to current robot"""
+        grids = self.map.find_discoverable_grids(blacklist=self.grid_blacklist)
+        if grids == []:
+            # No grids available
+            return None
+        grids_positions = [grid.get_position() for grid in grids]
+        current_position = self.get_position()
+        current_position = np.array([current_position[1], current_position[0]])
+        difference = current_position - grids_positions
+        distance = np.hypot(difference[:, 0], difference[:, 1])
+        nearest_grids = np.where(distance == np.min(distance))
+        return grids[np.random.choice(nearest_grids[0])]
+
+    def find_new_grid(self):
+        """Finds new grid for exploration"""
+        self.unassign_robot()
+        nearest_grid = self.find_nearest_grid()
+        if nearest_grid is None:
+            return None
+        if nearest_grid.assign_robot(self):
+            return nearest_grid
+        else:
+            return None
+
+    def find_random_grid(self):
+        """Find new random grid for exploration"""
+        # Unassign robot from previous grid
+        self.unassign_robot()
+        grids = self.map.find_discoverable_grids(blacklist=self.grid_blacklist)
+        return np.random.choice(grids)
 
     def generate_target_course(self, wx=None, wy=None):
         if wx is None or wy is None:
+            if self.error_count >= 10:
+                self.error_count = 0 # Reset counter
+                self.grid_blacklist.append(self.grid) # Add grid to blacklist
+                self.grid = self.find_new_grid()
+                if not self.grid_ok():
+                    return False
             self.init_variables()
-            self.wx, self.wy = self.generate_waypoints()
+            # Generate waypoint on some position undiscovered in grid
+            self.wx, self.wy = self.explore_grid()
         self.tx, self.ty, self.tyaw, self.tc, self.csp = generate_target_course(self.wx, self.wy)
+
+    def grid_ok(self):
+        """
+        Method handles all grid checks,
+        Returns true when everything is ok
+        and robot can proceed to exploration
+        """
+        if self.grid is not None and self.grid.is_covered():
+            # If grid if fully covered robot should proceed to new grid
+            self.unassign_robot()
+        if self.grid is None:
+            self.grid = self.find_new_grid()
+            if self.grid is None:
+                return False
+        return True
 
     def plan_path(self):
         mapped_objects = self.map.get_mapped_objects()
@@ -76,9 +149,15 @@ class Robot:
     def check_arrived(self):
         """Checks if arrived at destination"""
         current_position = self.get_position()
-        if np.hypot(current_position[0] - self.tx[-1], current_position[1] - self.ty[-1]) <= 1.0:
-            self.generate_target_course()
-            return True
+        try:
+            if (self.map.check_covered(self.wx[-1], self.wy[-1]) or
+                np.hypot(current_position[0] - self.tx[-1], current_position[1] - self.ty[-1]) <= 1.0):
+                # Scanned waypoint position or arrived at the destination
+                self.generate_target_course()
+                return True
+        except AttributeError:
+            # No waypoints assigned
+            return False
         return False
 
     def raycasting(self):
@@ -91,8 +170,25 @@ class Robot:
             self.map.map_objects(self.detected_objects)
         return self.detected_objects
 
+    def unassign_robot(self):
+        """Tries to unassign robot from grid and vice versa"""
+        try:
+            self.grid.unassign_robot(self)
+            self.grid = None
+            return True
+        except AttributeError:
+            # Robot is not assigned to any grid
+            return False
+
+    def get_assigned_grid(self):
+        """Returns currently assigned grid to robot"""
+        return self.grid
+
     def get_color(self):
         return self.color
+
+    def get_current_grid(self):
+        return self.map.get_grid(self.get_position())
 
     def get_speed(self):
         return self.c_speed
@@ -109,10 +205,14 @@ class Robot:
     def get_waypoints(self):
         return self.wx, self.wy
 
+    def get_last_waypoint(self):
+        """Returns coordinates of last waypoint"""
+        return self.wx[-1], self.wy[-1]
+
     def get_position(self):
         """Returns current robot position"""
         try:
-            return (self.path.x[1], self.path.y[1])
+            return np.array([self.path.x[1], self.path.y[1]])
         except AttributeError:
             return self.init_pos
 
@@ -122,20 +222,34 @@ class Robot:
 
     def get_direction(self):
         """Returns current robot direction"""
+        return self.direction
+
+    def calculate_direction(self):
+        """Calculates current robot direction"""
         path = self.path
-        return -90 + np.rad2deg(np.arctan2(path.y[1] - path.y[0], path.x[1] - path.x[0]))
+        self.direction = -90 + np.rad2deg(np.arctan2(path.y[1] - path.y[0], path.x[1] - path.x[0]))
 
 
 class Map:
-    def __init__(self, map_size, objects_count):
-        self.size = map_size
+    def __init__(self, map_size, grid_size, objects_count):
+        self.size = np.array(map_size)
         self.objects = self._generate_objects(objects_count)
         self.mapped_objects = np.empty((0,2))
         self.robots = []
         self.map_coverage = self._prepare_map_coverage()
+        self.grids = self._prepare_grids(grid_size)
 
     def _generate_objects(self, objects_count):
         return self.random_position(objects_count)
+
+    def _prepare_grids(self, grid_size):
+        """Prepares grids sized 20x20"""
+        grids_count = (self.size / grid_size).astype(int)
+        grids = []
+        for i in range(0, grids_count[0]):
+            for j in range(0, grids_count[1]):
+                grids.append(Grid(map=self, grid_size=grid_size, coordinates=[i, j]))
+        return grids
 
     def _prepare_map_coverage(self):
         """Prepares 2-D array showing which map areas are already scanned"""
@@ -147,9 +261,29 @@ class Map:
         """Assigns given robot to map"""
         self.robots.append(robot)
 
+    def find_discoverable_grids(self, blacklist=[]):
+        discoverable_grids = []
+        for grid in self.grids:
+            if not grid in blacklist \
+            and not grid.is_covered() \
+            and grid.get_assigned_robot() is None:
+                discoverable_grids.append(grid)
+        return discoverable_grids
+
+    def check_covered(self, x, y):
+        """Checks if given position is already discovered"""
+        try:
+            return self.map_coverage[int(y), int(x)] > 0.01
+        except IndexError:
+            return False
+
     def get_current_coverage(self):
         """Returns current map coverage in %"""
         return np.count_nonzero(self.map_coverage >= 0.5)/self.map_coverage_size * 100
+
+    def get_grid(self, position):
+        grid_coordinates = np.floor(position / 10)
+        return self.grids[grid_coordinates]
 
     def get_map_objects(self):
         """Returns all objects on the map"""
@@ -220,10 +354,60 @@ class Map:
         # Draw plot
         ax.pcolormesh(self.map_coverage, vmax=1.0, vmin=0.01, cmap=cmap)
 
+class Grid:
+    def __init__(self, map, grid_size, coordinates):
+        """Stores data about grid's coverage and assignment"""
+        self.map = map
+        self.grid_coordinates = np.array(coordinates)
+        self.grid_size = grid_size
+        self.grid = self.calculate_grid()
+        self.robot = None
+
+    def assign_robot(self, robot):
+        """Assigns given robot to discover this grid"""
+        if self.robot is not None:
+            return False
+        self.robot = robot
+        return True
+
+    def unassign_robot(self, robot=None):
+        """Unassigns given robot (default is assigned)"""
+        if robot is not None:
+            if self.robot == robot:
+                self.robot = None
+        else:
+            self.robot = None
+
+    def calculate_grid(self):
+        self.shift = self.grid_coordinates * self.grid_size
+        grid = self.map.map_coverage[self.shift[0] : self.shift[0] + self.grid_size, self.shift[1] : self.shift[1] + self.grid_size]
+        return grid
+
+    def is_covered(self):
+        """Checks if grid is fully covered"""
+        return np.all(self.grid >= 0.01)
+
+    def get_assigned_robot(self):
+        """Returns assigned robot"""
+        return self.robot
+
+    def get_position(self):
+        """Returns center position of grid"""
+        return self.grid_coordinates * self.grid_size + self.grid_size/2
+
+    def get_uncovered_positions(self):
+        """Returns all non-covered positions within the grid"""
+        indexes = np.where(self.grid < 0.01)
+        return np.vstack(indexes)
+
+    def grid_to_map(self, position):
+        """Transforms position from grid to map position"""
+        return position + self.shift
+
 def main():
     print(__file__ + " start!!")
 
-    map_entity = Map(map_size=MAP_SIZE, objects_count=OBJECTS_COUNT)
+    map_entity = Map(map_size=MAP_SIZE, grid_size=GRID_SIZE, objects_count=OBJECTS_COUNT)
     RFID = map_entity.get_map_objects()
 
     initial_positions = np.array([
@@ -232,7 +416,7 @@ def main():
         [0, 50],
         [0, 75]
     ])
-    colors = ['tab:blue', 'tab:red', 'tab:green', 'tab:yellow']
+    colors = ['tab:blue', 'tab:red', 'tab:green', 'tab:orange']
     # Create robots
     robots = []
     for _i in range(0, ROBOTS_COUNT):
@@ -243,7 +427,7 @@ def main():
     # Prepare plots
     fig, (ax1, ax2) = plt.subplots(1, 2)
 
-    while SIM_TIME >= time:
+    while map_entity.get_current_coverage() < 100:
         # Frenet Optimal Trajectory
         for robot in robots:
             robot.simulate()
@@ -259,14 +443,14 @@ def main():
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
             # plot frenet
-            ax1.set_title(f"Discorvered: {map_entity.get_current_coverage():.2f} %")
+            ax1.set_title(f"Discovered: {map_entity.get_current_coverage():.2f} %")
             ax1.set_aspect("equal")
             ax1.grid(True)
             # Plot stuff
             ax1.plot(RFID[:, 0], RFID[:, 1], "xk")
             for robot in robots:
-                ax1.plot(robot.get_tx(), robot.get_ty())
                 try:
+                    ax1.plot(robot.get_tx(), robot.get_ty())
                     path = robot.get_path()
                     ax1.plot(path.x[1:], path.y[1:], "-or")
                 except AttributeError:
@@ -275,9 +459,9 @@ def main():
             map_entity.draw_current_scanning_area(ax=ax1)
 
             # Move map with followed robot
-            path = robots[FOLLOW_ROBOT].get_path()
-            ax1.set_xlim(path.x[1] - ANIM_AREA, path.x[1] + ANIM_AREA)
-            ax1.set_ylim(path.y[1] - ANIM_AREA, path.y[1] + ANIM_AREA)
+            robot_position = robots[FOLLOW_ROBOT].get_position()
+            ax1.set_xlim(robot_position[0] - ANIM_AREA, robot_position[0] + ANIM_AREA)
+            ax1.set_ylim(robot_position[1] - ANIM_AREA, robot_position[1] + ANIM_AREA)
 
             # Draw raycasting
             ax1.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xr")
@@ -289,7 +473,8 @@ def main():
             # Draw robots and waypoints
             for robot in robots:
                 ax2.plot(*robot.get_position(), marker=(3, 0, robot.get_direction()), color=robot.get_color())
-                ax2.plot(*robot.get_waypoints(), "-or")
+                if robot.get_assigned_grid() is not None:
+                    ax2.plot(*robot.get_waypoints(), "-or")
             # Draw mapped objects
             ax2.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xr")
             ax2.set_xlim(0, MAP_SIZE[0])
