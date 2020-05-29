@@ -5,6 +5,7 @@ SIM_TIME = 50.0 # simulation time [s]
 # Map
 MAP_SIZE = [100, 100] # X and Y size of map
 GRID_SIZE = 20 # Grid (square) size
+DECAY_RATE = 0.002 # Rate of map info decay
 OBJECTS_COUNT = 100 # Number of objects created on the map
 # Raycasting
 XY_RES = 0.25  # x-y grid resolution [m]
@@ -279,7 +280,7 @@ class Map:
 
     def get_current_coverage(self):
         """Returns current map coverage in %"""
-        return np.count_nonzero(self.map_coverage >= 0.5)/self.map_coverage_size * 100
+        return np.count_nonzero(self.map_coverage > 0.01)/self.map_coverage_size * 100
 
     def get_grid(self, position):
         grid_coordinates = np.floor(position / 10)
@@ -296,6 +297,10 @@ class Map:
     def get_size(self):
         """Returns map size"""
         return self.size
+
+    def map_decay(self, rate):
+        """Handles coverage data decay on map"""
+        self.map_coverage[self.map_coverage > 0.01] -= rate
 
     def map_objects(self, objects):
         """Tries to map given objects"""
@@ -385,7 +390,7 @@ class Grid:
 
     def is_covered(self):
         """Checks if grid is fully covered"""
-        return np.all(self.grid >= 0.01)
+        return np.all(self.grid > 0.01)
 
     def get_assigned_robot(self):
         """Returns assigned robot"""
@@ -428,6 +433,8 @@ def main():
     fig, (ax1, ax2) = plt.subplots(1, 2)
 
     while map_entity.get_current_coverage() < 100:
+        # Map decay
+        map_entity.map_decay(rate=DECAY_RATE)
         # Frenet Optimal Trajectory
         for robot in robots:
             robot.simulate()
