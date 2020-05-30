@@ -165,7 +165,7 @@ class Robot:
         position = self.get_position()
         objects = self.map.get_map_objects()
         self.pmap, self.minx, self.maxx, self.miny, self.maxy, self.detected_objects = generate_ray_casting_grid_map(
-            ox=objects[:,0], oy=objects[:,1], xyreso=self.XY_RES, yawreso=self.YAW_RES,
+            objects=objects, xyreso=self.XY_RES, yawreso=self.YAW_RES,
             posx=position[0], posy=position[1])
         if not len(self.detected_objects) == 0:
             self.map.map_objects(self.detected_objects)

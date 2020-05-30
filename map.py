@@ -2,20 +2,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from grid import Grid
-from params import MAP_SIZE, GRID_SIZE, OBJECTS_COUNT, DECAY_RATE
+from map_object import MapObject
+from params import MAP_SIZE, GRID_SIZE, OBJECTS_COUNT, DECAY_RATE, OBJECT_RELOCATION_CHANCE
 
 class Map:
     def __init__(self):
         self.size = np.array(MAP_SIZE)
         self.objects = self._generate_objects(OBJECTS_COUNT)
-        self.mapped_objects = np.empty((0,2))
+        self.mapped_objects = []
         self.robots = []
         self.map_coverage = self._prepare_map_coverage()
         self.grids = self._prepare_grids(GRID_SIZE)
 
     def _generate_objects(self, objects_count):
         """Generates map objects"""
-        return self.random_position(objects_count)
+        positions = self.random_position(objects_count)
+        objects = []
+        for i in range(0, objects_count):
+            objects.append(MapObject(init_pos=positions[i, :], id_=i, map_=self))
+        return objects
 
     def _prepare_grids(self, grid_size):
         """Prepares grids sized 20x20"""
@@ -57,6 +62,16 @@ class Map:
         """Returns current map coverage in %"""
         return np.count_nonzero(self.map_coverage > 0.01)/self.map_coverage_size * 100
 
+    def get_position_coverage(self, x, y):
+        """
+        Returns given position coverage
+        0 for no info,
+        0.01 for very old info,
+        > 0.01 for some info,
+        0.5 max info (robot sees)
+        """
+        return self.map_coverage[int(y), int(x)]
+
     def get_grid(self, position):
         grid_coordinates = np.floor(position / 10)
         return self.grids[grid_coordinates]
@@ -69,6 +84,25 @@ class Map:
         """Returns all mapped objects"""
         return self.mapped_objects
 
+    def get_all_objects_positions(self, objects=None):
+        """Returns Nx2 array of all objects positions"""
+        if objects is None:
+            objects = self.objects
+        # Extract position from all objects
+        objects_positions = np.empty(shape=(len(objects), 2))
+        for i in range(0, len(objects)):
+            objects_positions[i, :] = objects[i].get_position()
+        return objects_positions
+
+    def get_relocated_objects_positions(self):
+        """Returns Nx2 array of positions of mapped objects which in reality relocated"""
+        relocated_objects = [ob for ob in self.mapped_objects if ob.has_relocated()]
+        return self.get_all_objects_positions(relocated_objects)
+
+    def get_mapped_objects_positions(self):
+        """Returns Nx2 array of mapped objects positions"""
+        return self.get_all_objects_positions(self.mapped_objects)
+
     def get_size(self):
         """Returns map size"""
         return self.size
@@ -79,7 +113,14 @@ class Map:
 
     def map_objects(self, objects):
         """Tries to map given objects"""
-        self.mapped_objects = np.unique(np.append(self.mapped_objects, objects, axis=0), axis=0)
+        for _object in objects:
+            if _object.has_relocated():
+                self.mapped_objects.remove(_object)
+                self.objects.remove(_object)
+            else:
+                if not _object.was_discovered():
+                    self.mapped_objects.append(_object)
+                    _object.discover()
 
     def random_position(self, count=None):
         """
@@ -133,3 +174,20 @@ class Map:
         cmap.set_under(color='white')
         # Draw plot
         ax.pcolormesh(self.map_coverage, vmax=1.0, vmin=0.01, cmap=cmap)
+
+    def randomly_relocate_objects(self):
+        """
+        With small chance for each objects, changes it's position
+        if area coverage is low enough
+        """
+        for object_ in self.objects:
+            if not object_.is_visible() and not object_.has_relocated() and np.random.random(1) < (abs(object_.get_information() - 1) * OBJECT_RELOCATION_CHANCE):
+                new_position = self.random_position()
+                while self.get_position_coverage(*new_position[0]) >= 0.49:
+                    new_position = self.random_position()
+                relocated_object = MapObject(init_pos=new_position, id_=object_.get_id(), map_=self)
+                self.objects.append(relocated_object)
+                if object_.was_discovered():
+                    object_.relocated(relocated_object)
+                else:
+                    self.objects.remove(object_)

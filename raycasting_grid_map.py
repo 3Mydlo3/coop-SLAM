@@ -76,7 +76,13 @@ def precasting(minx, miny, xw, yw, xyreso, yawreso, posx=0, posy=0):
     return precast
 
 
-def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
+def generate_ray_casting_grid_map(objects, xyreso, yawreso, posx=0, posy=0):
+
+    objects_positions = np.empty(shape=(len(objects), 2))
+    for i in range(0, len(objects)):
+        objects_positions[i, :] = objects[i].get_position()
+    ox = objects_positions[:, 0]
+    oy = objects_positions[:, 1]
 
     minx, miny, maxx, maxy, xw, yw = calc_grid_map_config(ox, oy, xyreso, posx=posx, posy=posy)
 
@@ -84,12 +90,13 @@ def generate_ray_casting_grid_map(ox, oy, xyreso, yawreso, posx=0, posy=0):
 
     precast = precasting(minx, miny, xw, yw, xyreso, yawreso, posx=posx, posy=posy)
 
-    obstacles_in_range = np.empty((0, 2))
-    for (x, y) in zip(ox, oy):
+    obstacles_in_range = []
+    for i in range(0, len(objects)):
+        x, y = objects_positions[i, :]
         # Check if given obstacle is in rays range
         d = math.hypot(x - posx, y - posy)
         if d <= RAYS_RANGE:
-            obstacles_in_range = np.append(obstacles_in_range, np.array([[x, y]]), axis=0)
+            obstacles_in_range.append(objects[i])
 
             angle = atan_zero_to_twopi(y - posy, x - posx)
             angleid = int(math.floor(angle / yawreso))

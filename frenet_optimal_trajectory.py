@@ -197,9 +197,10 @@ def calc_global_paths(fplist, csp):
     return fplist
 
 
-def check_collision(fp, ob):
-    for i in range(len(ob[:, 0])):
-        d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
+def check_collision(fp, objects):
+    for i in range(len(objects)):
+        ob = objects[i].get_position()
+        d = [((ix - ob[0]) ** 2 + (iy - ob[1]) ** 2)
              for (ix, iy) in zip(fp.x, fp.y)]
 
         collision = any([di <= ROBOT_RADIUS ** 2 for di in d])

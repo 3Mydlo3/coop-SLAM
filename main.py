@@ -10,7 +10,6 @@ def main():
 
     # Create map and get objects
     map_entity = Map()
-    objects = map_entity.get_map_objects()
 
     # Create robots
     robots = []
@@ -23,6 +22,8 @@ def main():
     fig, (ax1, ax2) = plt.subplots(1, 2)
 
     while map_entity.get_current_coverage() < 100:
+        # Objects random relocation
+        map_entity.randomly_relocate_objects()
         # Map decay
         map_entity.map_decay()
         # Simulate robots
@@ -36,7 +37,8 @@ def main():
             ax1.cla()
             ax2.cla()
             # Obtain all mapped objects
-            mapped_objects = map_entity.get_mapped_objects()
+            mapped_objects = map_entity.get_mapped_objects_positions()
+            relocated_objects = map_entity.get_relocated_objects_positions()
             # For stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
@@ -46,6 +48,7 @@ def main():
             ax1.set_aspect("equal")
             ax1.grid(True)
             # Plot objects
+            objects = map_entity.get_all_objects_positions()
             ax1.plot(objects[:, 0], objects[:, 1], "xk")
             # Plot all robots paths and positions
             for robot in robots:
@@ -65,6 +68,7 @@ def main():
             ax1.set_ylim(robot_position[1] - ANIM_AREA, robot_position[1] + ANIM_AREA)
             # Plot mapped objects
             ax1.plot(mapped_objects[:, 0], mapped_objects[:, 1], "xr")
+            ax1.plot(relocated_objects[:, 0], relocated_objects[:, 1], "xy")
 
             # Plot map
             ax2.set_title("Map")

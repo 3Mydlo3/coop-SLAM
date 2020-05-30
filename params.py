@@ -7,6 +7,7 @@ MAP_SIZE = [100, 100] # X and Y size of map
 GRID_SIZE = 20 # Grid (square) size
 DECAY_RATE = 0.002 # Rate of map info decay
 OBJECTS_COUNT = 100 # Number of objects created on the map
+OBJECT_RELOCATION_CHANCE = 0.01 # Chance of object relocating when 0 information about it
 # Raycasting
 XY_RES = 0.25  # x-y grid resolution [m]
 YAW_RES = np.deg2rad(2.0)  # yaw angle resolution [rad]
