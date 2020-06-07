@@ -20,7 +20,7 @@ class MapObject:
             return NotImplemented
 
     def __hash__(self):
-        return hash(str(self.position))
+        return hash(str(self.id) + str(self.position))
 
     def get_id(self):
         return self.id
@@ -32,7 +32,7 @@ class MapObject:
         return self.information
 
     def has_relocated(self):
-        return True if self.relocated_object is not None else False
+        return self.relocated_object is not None
 
     def is_visible(self):
         """Checks whether objects any robot can see the object"""

@@ -163,7 +163,7 @@ class Robot:
     def raycasting(self):
         """Handles scanning and returns list of detected objects"""
         position = self.get_position()
-        objects = self.map.get_map_objects()
+        objects = list(set(self.map.get_map_objects() + self.map.get_mapped_objects()))
         self.pmap, self.minx, self.maxx, self.miny, self.maxy, self.detected_objects = generate_ray_casting_grid_map(
             objects=objects, xyreso=self.XY_RES, yawreso=self.YAW_RES,
             posx=position[0], posy=position[1])

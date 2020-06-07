@@ -180,7 +180,8 @@ class Map:
         With small chance for each objects, changes it's position
         if area coverage is low enough
         """
-        for object_ in self.objects:
+        objects_ = self.objects.copy()
+        for object_ in objects_:
             if not object_.is_visible() and not object_.has_relocated() and np.random.random(1) < (abs(object_.get_information() - 1) * OBJECT_RELOCATION_CHANCE):
                 new_position = self.random_position()
                 while self.get_position_coverage(*new_position[0]) >= 0.49:
