@@ -188,6 +188,9 @@ class Robot:
     def get_color(self):
         return self.color
 
+    def get_id(self):
+        return self.id
+
     def get_current_grid(self):
         return self.map.get_grid(self.get_position())
 
