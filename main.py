@@ -5,9 +5,16 @@ from robot import Robot
 from map import Map
 from params import ROBOTS_COUNT, DT, SHOW_ANIMATION, ANIM_AREA, FOLLOW_ROBOT, MAP_SIZE
 
-def main():
-    print(__file__ + " start!!")
+end = False
 
+def key_pressed(event):
+    global end
+    print("EVENT")
+    if event.key == 'escape':
+        print("END")
+        end = True
+
+def main():
     # Create map and get objects
     map_entity = Map()
 
@@ -30,7 +37,7 @@ def main():
     plots = fig.get_axes()
     robot_plots = plots[:-1]
 
-    while map_entity.get_current_coverage() < 100:
+    while map_entity.get_current_coverage() < 100 and not end:
         # Objects random relocation
         map_entity.randomly_relocate_objects()
         # Map decay
@@ -49,8 +56,7 @@ def main():
             mapped_objects = map_entity.get_mapped_objects_positions()
             relocated_objects = map_entity.get_relocated_objects_positions()
             # For stopping simulation with the esc key.
-            plt.gcf().canvas.mpl_connect('key_release_event',
-                    lambda event: [exit(0) if event.key == 'escape' else None])
+            plt.gcf().canvas.mpl_connect('key_press_event', key_pressed)
 
             for i in range(0, 3):
                 axrb = robot_plots[i]

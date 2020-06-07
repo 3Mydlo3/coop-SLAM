@@ -21,11 +21,6 @@ import math
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
-                "/QuinticPolynomialsPlanner/")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
-                "/CubicSpline/")
-
 try:
     from quintic_polynomials_planner import QuinticPolynomial
     import cubic_spline_planner
